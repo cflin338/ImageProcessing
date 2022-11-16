@@ -58,12 +58,20 @@ def UpConv(inp, channels):
     
     #method 1, upsample + conv2d
     ups = tf.keras.layers.UpSampling2D((2,2), )(inp)
-
-    return tf.keras.layers.Conv2D(channels, 
+    outp = tf.keras.layers.Conv2D(channels, 
                                   kernel_size = (2,2), 
                                   padding = 'same', 
                                   activation = 'relu')(ups)
-    #method 1, transpose convolution
+    """
+    #method 2, transpose convolution
+    outp = tf.keras.layers.Conv2DTranspose(filters = channels, 
+                                           kernel_size = (2,2), 
+                                           padding = 'same',
+                                           activation = 'relu', 
+                                           dilation_rate = (2,2))(inp)
+    """
+    return outp
+    
 
 def UNetUpStep(inp, intermediate, channels):
     prev_layer = UpConv(inp, channels[0])
@@ -97,7 +105,7 @@ def UNet(inp_shape, classes):
                                              activation = 'sigmoid')(preseg)
     
     UNetModel = tf.keras.Model(inputs = inp, outputs = segmented_layer, )
-    #model.compile(optimizer = adam, loss = binary_crossentropy, metrics = ['accuracy'])
+
     return UNetModel
 
 def VisualizeResults(model, test_data):
@@ -192,13 +200,3 @@ if __name__=='__main__':
     #
     VisualizeResults(model, test)
     
-
-#saving weights
-#tf.keras.callbacks.ModelCheckpoint -> callback allows continually saving weight during and @ end of training
-#   https://www.tensorflow.org/tutorials/keras/save_and_load
-
-#cehckpoint_path = "..../cp.ckpt"
-#checkpoint_dir = os.path.dirname(checkpoint_path)
-#cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath = checkpoint_path, save_weights_only = True, verbose = 1)
-#model.fit(...., callbacks = [cp_callback])
-
