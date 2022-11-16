@@ -7,6 +7,9 @@ import numpy as np
 import tensorflow as tf
 import matplotlib.pyplot as plt
 import random
+import os
+import argparse
+
 """
 class UNetSegmentation(tf.keras.Model):
     def __init__(self,):
@@ -18,7 +21,14 @@ class UNetSegmentation(tf.keras.Model):
         return 
 """
 
-def Conv3(inp, channels):
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--load_weights", default = 0, help = "Load weights")
+    #parser.add_argument("--SmoothSize", default = 5, help = "Smooth kernel size")
+    #parser.add_argument("--SobelThreshold", default = 70, help = "[0,255]")
+    return parser.parse_args()
+
+def ConvStep(inp, channels):
     out = tf.keras.layers.Conv2D(filters = channels, 
                                  kernel_size = (3,3), 
                                  padding = 'same', 
@@ -26,8 +36,8 @@ def Conv3(inp, channels):
     return out
     
 def UNetDownStep(inp, channels):
-    levela = Conv3(inp, channels)
-    levelb = Conv3(levela, channels)
+    levela = ConvStep(inp, channels)
+    levelb = ConvStep(levela, channels)
     
     out = tf.keras.layers.MaxPool2D((2,2))(levelb)
     
@@ -39,8 +49,8 @@ def UNetDownChannel(inp):
     intermediate3, step3 = UNetDownStep(step2, 256)
     intermediate4, step4 = UNetDownStep(step3, 512)
     
-    step5 = Conv3(step4, 1024)
-    step5 = Conv3(step5, 1024)
+    step5 = ConvStep(step4, 1024)
+    step5 = ConvStep(step5, 1024)
     
     return intermediate1, intermediate2, intermediate3, intermediate4, step5
 
@@ -61,8 +71,8 @@ def UNetUpStep(inp, intermediate, channels):
     cropped = tf.keras.layers.Cropping2D((intermediate.shape[1]//2 - prev_layer.shape[1]//2,
                                 intermediate.shape[2]//2 - prev_layer.shape[2]//2))(intermediate)
     l1 = tf.keras.layers.concatenate([cropped, prev_layer], axis = 3)
-    l2 = Conv3(l1, channels[1] )
-    l3 = Conv3(l2, channels[1])
+    l2 = ConvStep(l1, channels[1] )
+    l3 = ConvStep(l2, channels[1])
     
     return l3
 
@@ -139,22 +149,49 @@ def DisplayTrainingTrend(model):
     
 
 
-m = UNet((512,512,1),4)
-m.compile(optimizer = tf.keras.optimizers.Adam(learning_rate=1e-4), 
-          loss = 'binary_crossentropy', 
-          metrics = ['accuracy'])
+if __name__=='__main__':
+    #arguments = parse_args()
+    
+    train = np.load('E:/CovidCTImageSeg/covid-segmentation/images_medseg.npy')
+    target = np.load('E:/CovidCTImageSeg/covid-segmentation/masks_medseg.npy')
 
-train = np.load('E:/CovidCTImageSeg/covid-segmentation/images_medseg.npy')
-target = np.load('E:/CovidCTImageSeg/covid-segmentation/masks_medseg.npy')
+    #target = np.load('E:/CovidCTImageSeg/covid-segmentation/masks_radiopedia.npy')
+    #train = np.load('E:/CovidCTImageSeg/covid-segmentation/images_radiopedia.npy')
 
-batch_size = 2
-epochs = 50
+    test = np.load('E:/CovidCTImageSeg/covid-segmentation/test_images_medseg.npy')
 
-m.fit(train, target, batch_size = batch_size, epochs = epochs, shuffle = True)
+    model = UNet(train.shape[1:],target.shape[3])
+    model.compile(optimizer = tf.keras.optimizers.Adam(learning_rate=1e-4), 
+              loss = 'binary_crossentropy', 
+              metrics = ['accuracy'])
 
-test = np.load('E:/CovidCTImageSeg/covid-segmentation/test_images_medseg.npy')
+    
 
-
+    #saving weights
+    dir_path = os.path.dirname(os.path.realpath(__file__))
+    checkpoint_path = dir_path + "\\UNetTraining\\BaseUNetCP.ckpt"
+    checkpoint_dir = os.path.dirname(checkpoint_path)
+    callback = tf.keras.callbacks.ModelCheckpoint(filepath=checkpoint_path, 
+                                                  save_weights_only = True,
+                                                  verbose = 1)
+    load_weights = True
+    #if arguments.load_weights:
+    if load_weights:
+        model.load_weights(checkpoint_path)
+    else:
+        batch_size = 2
+        epochs = 50
+        model.fit(train, 
+                  target, 
+                  batch_size = batch_size, 
+                  epochs = epochs, 
+                  shuffle = True,
+                  callbacks = [callback]) #pass callback to training
+        DisplayTrainingTrend(model)
+    #model.evaluate(testinput, testlabel, verbose = 2)
+    #
+    VisualizeResults(model, test)
+    
 
 #saving weights
 #tf.keras.callbacks.ModelCheckpoint -> callback allows continually saving weight during and @ end of training
